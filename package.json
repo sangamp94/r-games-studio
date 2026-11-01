@@ -1,0 +1,14 @@
+{
+  "name": "r-games-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "R GAMES STUDIO - HTML5 gaming portal with Neon Postgres auth",
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
