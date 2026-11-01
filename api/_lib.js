@@ -42,7 +42,24 @@ const SCHEMA = [
      created_at INTEGER NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS login_attempts_email_idx ON login_attempts (email, created_at)`,
-  `CREATE INDEX IF NOT EXISTS login_attempts_ip_idx ON login_attempts (ip, created_at)`
+  `CREATE INDEX IF NOT EXISTS login_attempts_ip_idx ON login_attempts (ip, created_at)`,
+  // Games: the full game record is stored as JSON in `data`; plays is a separate counter column
+  `CREATE TABLE IF NOT EXISTS games (
+     id         TEXT PRIMARY KEY,
+     status     TEXT NOT NULL DEFAULT 'draft',
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL,
+     plays      INTEGER NOT NULL DEFAULT 0,
+     data       TEXT NOT NULL
+   )`,
+  // Game ZIP packages are split into chunks (base64 text) so every request stays small
+  `CREATE TABLE IF NOT EXISTS game_chunks (
+     game_id TEXT NOT NULL,
+     pkg_id  TEXT NOT NULL,
+     idx     INTEGER NOT NULL,
+     data    TEXT NOT NULL,
+     PRIMARY KEY (game_id, pkg_id, idx)
+   )`
 ];
 
 let _ready = null;
@@ -115,6 +132,14 @@ function getUser(req) {
   }
 }
 
+// Returns the owner session, or sends 401/403 and returns null
+function requireOwner(req, res) {
+  const u = getUser(req);
+  if (!u) { res.status(401).json({ error: 'Please sign in again.' }); return null; }
+  if (u.role !== 'owner') { res.status(403).json({ error: 'Owner access only.' }); return null; }
+  return u;
+}
+
 function clientIp(req) {
   const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   return xff || req.socket?.remoteAddress || 'unknown';
@@ -146,6 +171,7 @@ function readCredentials(req) {
 
 module.exports = {
   query,
+  requireOwner,
   nowSec,
   fail,
   setSession,

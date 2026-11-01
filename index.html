@@ -1497,8 +1497,6 @@
          Connector + Client-side ZIP Extraction Engine + Multi-File ZIP Exporter
          ========================================================================== -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, increment, onSnapshot, Bytes } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         /* --------------------------------------------------------------------------
            MODULE 1: UTILITIES & SANITIZATION (js/app.js)
@@ -1599,25 +1597,21 @@
             playToken: 0
         };
 
-        let db = null;
-        const appId = typeof __app_id !== "undefined" ? __app_id : "r-games-studio-prod";
-
-        // Optional: for your own hosting (Netlify/Vercel/etc.) paste your Firebase web config object here.
-        // Example: { apiKey: "...", authDomain: "...", projectId: "...", appId: "..." }
-        // When the host injects __firebase_config this value is ignored. With neither, the app runs in
-        // in-memory mode (nothing is persisted after a page refresh).
-        const FIREBASE_CONFIG_FALLBACK = null;
-
-        const CHUNK_BYTES = 900 * 1024;          // Firestore documents are capped at 1 MiB, so keep chunks below that
+        const CHUNK_BYTES = 700 * 1024;          // each chunk is sent as base64 (~930 KB) to stay well under Vercel's 4.5 MB request limit
         const MAX_PACKAGE_MB = 20;               // Max stored size of one game package
         const MAX_EXPANDED_MB = 150;             // Zip-bomb guard: max total size after extraction
 
-        function gameDocRef(gameId) {
-            return doc(db, "artifacts", appId, "public", "data", "games", gameId);
-        }
-
-        function chunkColRef(gameId) {
-            return collection(db, "artifacts", appId, "public", "data", "games", gameId, "chunks");
+        // Games and game files are stored in Turso through /api/games and /api/chunks.
+        async function fetchGames() {
+            const d = await apiCall("/api/games", "GET", undefined, 20000);
+            const loadedGames = (d.games || []).slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+            // Play-counter increments alone should not repaint the whole page for everyone.
+            const sig = loadedGames.map(g => `${g.id}:${g.updated_at || 0}:${g.status}`).join("|");
+            const unchanged = appState.dbReady && sig === appState.gamesSig;
+            appState.gamesSig = sig;
+            appState.games = loadedGames;
+            appState.dbReady = true;
+            if (!unchanged && !shouldDeferRender()) renderCurrentRoute();
         }
 
         async function initCloudDatabase() {
@@ -1630,29 +1624,16 @@
             }, 8000);
 
             try {
-                let cfg = null;
-                if (typeof __firebase_config !== "undefined" && __firebase_config) {
-                    cfg = typeof __firebase_config === "string" ? JSON.parse(__firebase_config) : __firebase_config;
-                } else if (FIREBASE_CONFIG_FALLBACK) {
-                    cfg = FIREBASE_CONFIG_FALLBACK;
-                }
-
-                if (cfg) {
-                    const app = initializeApp(cfg);
-                    db = getFirestore(app);
-                    subscribeToDatabaseCollections();
-                } else {
-                    appState.dbReady = true;
-                    appState.adminsLoaded = true;
-                    renderCurrentRoute();
-                }
+                await fetchGames();
             } catch (err) {
-                console.error("Database initialization notice:", err);
-                db = null;
+                console.error("Games could not be loaded:", err);
+                showToast(err.message || "Could not load games.", "error");
                 appState.dbReady = true;
                 appState.adminsLoaded = true;
                 renderCurrentRoute();
             }
+            appState.adminsLoaded = true;
+            setInterval(() => { fetchGames().catch(() => {}); }, 60000);
         }
 
         // Re-rendering replaces the whole DOM. Skip it when that would interrupt the user
@@ -1666,44 +1647,13 @@
             return false;
         }
 
-        function subscribeToDatabaseCollections() {
-            if (!db) return;
-
-            // 1. GAMES collection (/artifacts/{appId}/public/data/games)
-            const gamesCol = collection(db, "artifacts", appId, "public", "data", "games");
-            onSnapshot(gamesCol, (snapshot) => {
-                const loadedGames = [];
-                snapshot.forEach(docSnap => {
-                    loadedGames.push({ id: docSnap.id, ...docSnap.data() });
-                });
-                loadedGames.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-
-                // Play-counter increments alone should not repaint the whole page for everyone.
-                const sig = loadedGames.map(g => `${g.id}:${g.updated_at || 0}:${g.status}`).join("|");
-                const unchanged = appState.dbReady && sig === appState.gamesSig;
-                appState.gamesSig = sig;
-                appState.games = loadedGames;
-                appState.dbReady = true;
-                if (!unchanged && !shouldDeferRender()) renderCurrentRoute();
-            }, (err) => {
-                console.error("Games listener error:", err);
-                appState.dbReady = true;
-                renderCurrentRoute();
-            });
-
-            // Admin credentials are no longer stored in Firestore: login/register live in Neon (see /api).
-        }
-
         async function saveGameToDatabase(gameRecord) {
-            if (db) {
-                // merge:true keeps server-side fields such as the play counter when an admin edits a game
-                await setDoc(gameDocRef(gameRecord.id), gameRecord, { merge: true });
-            } else {
-                const idx = appState.games.findIndex(g => g.id === gameRecord.id);
-                if (idx >= 0) appState.games[idx] = { ...appState.games[idx], ...gameRecord };
-                else appState.games.unshift(gameRecord);
-                renderCurrentRoute();
-            }
+            await apiCall("/api/games", "POST", { action: "save", game: gameRecord }, 30000);
+            const idx = appState.games.findIndex(g => g.id === gameRecord.id);
+            if (idx >= 0) appState.games[idx] = { ...appState.games[idx], ...gameRecord };
+            else appState.games.unshift({ plays: 0, ...gameRecord });
+            appState.gamesSig = "";
+            renderCurrentRoute();
         }
 
         async function deleteGameFromDatabase(gameId) {
@@ -1711,13 +1661,10 @@
                 URL.revokeObjectURL(appState.activeRuntimeUrls.get(gameId));
                 appState.activeRuntimeUrls.delete(gameId);
             }
-            try { await deletePackageChunks(gameId, null); } catch (err) { console.warn("Chunk cleanup failed:", err); }
-            if (db) {
-                await deleteDoc(gameDocRef(gameId));
-            } else {
-                appState.games = appState.games.filter(g => g.id !== gameId);
-                renderCurrentRoute();
-            }
+            await apiCall("/api/games", "POST", { action: "delete", id: gameId }, 30000);
+            appState.games = appState.games.filter(g => g.id !== gameId);
+            appState.gamesSig = "";
+            renderCurrentRoute();
         }
 
         /* --------------------------------------------------------------------------
@@ -1750,6 +1697,7 @@
             appState.user = user || null;
             if (user && user.role === "owner") startAdminSession(user.email);
             else appState.adminSession = null;
+            if (appState.dbReady) fetchGames().catch(() => {});
         }
 
         async function restoreSession() {
@@ -1775,42 +1723,39 @@
             try { await apiCall("/api/logout", "POST"); } catch (err) { /* cookie may already be gone */ }
             appState.user = null;
             appState.adminSession = null;
+            if (appState.dbReady) fetchGames().catch(() => {});
         }
 
-        /* --- Game package storage: the original ZIP is split into <1 MiB chunks stored under games/{id}/chunks --- */
+        /* --- Game package storage: the original ZIP is split into chunks stored in Turso (table game_chunks) --- */
+        function bytesToBase64(bytes) {
+            let bin = "";
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(bin);
+        }
+        function base64ToBytes(b64) {
+            const bin = atob(b64);
+            const out = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+
         async function savePackageChunks(gameId, pkgId, bytes, onProgress) {
             const total = Math.max(1, Math.ceil(bytes.length / CHUNK_BYTES));
-            if (!db) {
-                appState.localPackages.set(gameId, bytes);
-                return total;
-            }
             for (let i = 0; i < total; i++) {
                 const part = bytes.slice(i * CHUNK_BYTES, (i + 1) * CHUNK_BYTES);
-                const chunkId = `${pkgId}_${String(i).padStart(4, "0")}`;
-                await setDoc(doc(db, "artifacts", appId, "public", "data", "games", gameId, "chunks", chunkId), {
-                    index: i,
-                    data: Bytes.fromUint8Array(part)
-                });
+                await apiCall("/api/chunks", "POST", { game: gameId, pkg: pkgId, i, data: bytesToBase64(part) }, 60000);
                 if (onProgress) onProgress(i + 1, total);
             }
             return total;
         }
 
         async function loadPackageBytes(game) {
-            if (!db) {
-                const local = appState.localPackages.get(game.id);
-                if (!local) throw new Error("Game files are not available in this session.");
-                return local;
-            }
             const count = game.chunk_count || 0;
             if (!game.package_id || count < 1) throw new Error("This game has no stored files.");
-            const snaps = await Promise.all(Array.from({ length: count }, (_, i) =>
-                getDoc(doc(db, "artifacts", appId, "public", "data", "games", game.id, "chunks", `${game.package_id}_${String(i).padStart(4, "0")}`))
-            ));
-            const parts = snaps.map((s, i) => {
-                if (!s.exists()) throw new Error(`Game file part ${i + 1}/${count} is missing.`);
-                return s.data().data.toUint8Array();
-            });
+            const parts = await Promise.all(Array.from({ length: count }, async (_, i) => {
+                const d = await apiCall(`/api/chunks?game=${encodeURIComponent(game.id)}&pkg=${encodeURIComponent(game.package_id)}&i=${i}`, "GET", undefined, 60000);
+                return base64ToBytes(d.data);
+            }));
             const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
             let offset = 0;
             parts.forEach(p => { out.set(p, offset); offset += p.length; });
@@ -1819,14 +1764,7 @@
 
         // keepPkgId: chunks of this package are kept; everything else is removed. null removes all chunks.
         async function deletePackageChunks(gameId, keepPkgId) {
-            if (!db) {
-                if (!keepPkgId) appState.localPackages.delete(gameId);
-                return;
-            }
-            const snap = await getDocs(chunkColRef(gameId));
-            await Promise.all(snap.docs
-                .filter(d => !keepPkgId || !d.id.startsWith(keepPkgId + "_"))
-                .map(d => deleteDoc(d.ref)));
+            await apiCall("/api/chunks", "POST", { action: "prune", game: gameId, keep: keepPkgId || "" }, 30000);
         }
 
         /* --- Play counter (once per browser session per game) --- */
@@ -1840,12 +1778,9 @@
                 sessionStorage.setItem("rg_played", JSON.stringify(seen));
             } catch (err) { /* storage may be unavailable; fall through */ }
 
-            if (db) {
-                updateDoc(gameDocRef(game.id), { plays: increment(1) }).catch(err => console.warn("Play count skipped:", err));
-            } else {
-                const g = appState.games.find(x => x.id === game.id);
-                if (g) g.plays = (g.plays || 0) + 1;
-            }
+            apiCall("/api/games", "POST", { action: "play", id: game.id }, 8000).catch(err => console.warn("Play count skipped:", err));
+            const g = appState.games.find(x => x.id === game.id);
+            if (g) g.plays = (g.plays || 0) + 1;
         }
 
         function loadSavedFor(gameId) {
@@ -3970,7 +3905,7 @@
                         await saveGameToDatabase(gameRecord);
                         recordSaved = true;
                         // Remove superseded package chunks only after the new record is safely stored.
-                        try { await deletePackageChunks(gameId, sourceFields.package_id || null); } catch (err) { console.warn("Old file cleanup skipped:", err); }                        await saveGameToDatabase(gameRecord);
+                        try { await deletePackageChunks(gameId, sourceFields.package_id || null); } catch (err) { console.warn("Old file cleanup skipped:", err); }
                         appState.editingGameId = null;
                         appState.adminSubView = "all-games";
                         showToast(`"${title}" successfully validated and saved as ${status.toUpperCase()}!`, "success");

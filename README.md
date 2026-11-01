@@ -34,6 +34,9 @@ vercel dev
 | `GET  /api/me` | Current session ka user |
 | `POST /api/logout` | Logout |
 | `POST /api/change-password` | Password badalna (signed-in user) |
+| `GET  /api/games` | Games ki list (visitor: sirf published, owner: sab) |
+| `POST /api/games` | `save` / `delete` (owner) aur `play` counter |
+| `GET/POST /api/chunks` | Game ZIP ke tukde (Turso me save/load) |
 
 ## Security notes
 
@@ -41,5 +44,4 @@ vercel dev
   Agar kahin share ho gaya ho to Turso dashboard se naya token banao aur purana revoke karo.
 - Purana Firestore admin document delete karo:
   `artifacts/r-games-studio-prod/public/data/admins/owner_account`
-- Games ka data abhi bhi Firestore me hai. Uske rules lock karo, warna koi bhi direct games
-  likh/delete kar sakta hai.
+- Games ab Turso me save hote hain (tables `games`, `game_chunks`, API khud bana leti hai). Firebase ki ab zarurat nahi.
