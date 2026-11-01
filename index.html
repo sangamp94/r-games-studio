@@ -11,7 +11,8 @@
     <!-- Google Fonts: Plus Jakarta Sans, Space Grotesk & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet"></noscript>
     <!-- JSZip for Real Client-Side ZIP Inspection, Validation & Multi-File Project Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
@@ -1611,6 +1612,43 @@
             .brand-text { font-size: 17px; white-space: nowrap; }
         }
         @media (prefers-reduced-motion: reduce) { #thunderFxCanvas, .rg-zap { display: none; } }
+
+        /* ==========================================================================
+           PERFORMANCE PASS: only cheap (transform/opacity) animations stay on
+           ========================================================================== */
+        .spotlight-banner::after, .games-grid .game-card::after { display: none; }
+        .spotlight-mesh, .brand-emblem, .hero-cta-group .btn-primary, .hero-cta-group .btn-primary::after, .hero-title .text-crimson { animation: none; }
+        .spotlight-banner { animation: rgBannerIn .8s var(--ease-out) both; }
+        .hero-title .text-crimson { background-size: 100% 100%; background-image: linear-gradient(100deg, #F04468, #FF9EB1 55%, #00E5FF); }
+        .hero-cta-group .btn-primary { box-shadow: 0 0 22px rgba(240, 68, 104, .45); }
+        .pub-header { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(9, 9, 13, .98); }
+        .rg-zap { filter: none; stroke-width: 3; }
+        .rg-ticker { mask-image: none; -webkit-mask-image: none; }
+        .rg-ticker-track, .spotlight-feature-card, .rg-zap { will-change: transform, opacity; }
+        .games-grid .game-card { transition: transform .3s var(--ease-out), border-color .3s; }
+        @media (hover: none) {
+            .games-grid .game-card:hover, .rg-perk:hover { transform: none; box-shadow: none; }
+            .spotlight-feature-card:hover .spotlight-preview-frame img { transform: none; }
+        }
+        @media (pointer: coarse), (max-width: 768px) {
+            #energyFxCanvas { display: none; }
+            .spotlight-feature-card { animation: rgRise .9s .45s var(--ease-out) backwards; }
+            .rg-ticker-track { animation-duration: 45s; }
+        }
+
+        /* ==========================================================================
+           SMOOTHNESS FIXES + AUTO LITE MODE (turns on by itself if the device is slow)
+           ========================================================================== */
+        html { overflow-x: visible; }
+        body { overflow-x: hidden; overflow-x: clip; }
+        .games-grid .game-card { animation: none; }
+        .rg-ticker-track, .spotlight-feature-card, .rg-zap { will-change: auto; }
+        .game-thumb, .spotlight-preview-frame img { content-visibility: auto; }
+        .games-grid .game-card, .rg-perk { contain: layout paint; }
+        .rg-lite *, .rg-lite *::before, .rg-lite *::after { animation: none !important; transition: none !important; }
+        .rg-lite #thunderFxCanvas, .rg-lite #energyFxCanvas, .rg-lite .rg-zap, .rg-lite .rg-ticker { display: none !important; }
+        .rg-lite .spotlight-feature-card { box-shadow: none; }
+        .rg-lite .games-grid .game-card:hover, .rg-lite .rg-perk:hover { transform: none; box-shadow: none; }
     </style>
 </head>
 <body>
@@ -1776,7 +1814,7 @@
                 renderCurrentRoute();
             }
             appState.adminsLoaded = true;
-            setInterval(() => { fetchGames().catch(() => {}); }, 60000);
+            setInterval(() => { if (!document.hidden) fetchGames().catch(() => {}); }, 300000);
         }
 
         // Re-rendering replaces the whole DOM. Skip it when that would interrupt the user
@@ -2711,7 +2749,7 @@
             return `
                 <article class="game-card" data-play-game="${escapeHTML(game.id)}" role="link" tabindex="0" aria-label="Play ${escapeHTML(game.title)}">
                     <div class="game-thumb-wrap">
-                        <img class="game-thumb" src="${escapeHTML(game.thumbnail_url)}" alt="${escapeHTML(game.title)}" loading="lazy">
+                        <img class="game-thumb" src="${escapeHTML(game.thumbnail_url)}" alt="${escapeHTML(game.title)}" loading="lazy" decoding="async">
                         <span class="game-cat-tag">${escapeHTML(game.category || "Action")}</span>
                         <div class="game-card-overlay">
                             <span class="play-badge-floating">
@@ -2920,7 +2958,7 @@
                                     <div class="spotlight-feature-card">
                                         <div class="spotlight-preview-frame">
                                             ${featuredGame ? `
-                                                <img src="${escapeHTML(featuredGame.thumbnail_url)}" alt="${escapeHTML(featuredGame.title)}">
+                                                <img src="${escapeHTML(featuredGame.thumbnail_url)}" alt="${escapeHTML(featuredGame.title)}" decoding="async" fetchpriority="high">
                                             ` : `
                                                 <div class="spotlight-standby-graphic">
                                                     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m-2-2v4m7-1h.01m3-2h.01"/></svg>
@@ -3208,8 +3246,11 @@
 
             const searchInput = document.getElementById("publicSearchInput");
             if (searchInput) {
+                let searchTimer = 0;
                 searchInput.addEventListener("input", (e) => {
                     appState.searchQuery = e.target.value;
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(() => {
                     const gridMount = document.getElementById("publicGamesGridMount");
                     const countPill = document.getElementById("liveVisibleCountPill");
                     if (gridMount) {
@@ -3225,6 +3266,7 @@
                             bindGameCardClicks();
                         }
                     }
+                    }, 140);
                 });
             }
 
@@ -4229,6 +4271,7 @@
         function initFuturisticEnergyCanvas() {
             const canvas = document.getElementById("energyFxCanvas");
             if (!canvas) return;
+            if (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768) { canvas.style.display = "none"; return; }
             const ctx = canvas.getContext("2d", { alpha: true });
             let width = canvas.width = window.innerWidth;
             let height = canvas.height = window.innerHeight;
@@ -4304,8 +4347,30 @@
         /* --------------------------------------------------------------------------
            THUNDER & TOUCH SPARKS: random lightning in the sky + sparks/arcs wherever you touch
            -------------------------------------------------------------------------- */
+        /* Auto lite mode: if the first seconds run below ~25 fps, all decorative effects are switched off. */
+        (function perfGuard() {
+            const root = document.documentElement;
+            const lite = () => { root.classList.add("rg-lite"); try { localStorage.setItem("rg_lite", "1"); } catch (e) { /* ignore */ } };
+            try { if (localStorage.getItem("rg_lite") === "1") { root.classList.add("rg-lite"); return; } } catch (e) { /* ignore */ }
+            if (navigator.deviceMemory && navigator.deviceMemory <= 3) { root.classList.add("rg-lite"); return; }
+            let last = 0, frames = 0, slow = 0, round = 0;
+            function tick(t) {
+                if (document.hidden) { last = 0; return requestAnimationFrame(tick); }
+                if (last) { frames++; if (t - last > 40) slow++; }
+                last = t;
+                if (frames >= 80) {
+                    if (slow / frames > 0.2) return lite();
+                    if (++round >= 3) return;
+                    frames = 0; slow = 0;
+                }
+                requestAnimationFrame(tick);
+            }
+            setTimeout(() => requestAnimationFrame(tick), 1200);
+        })();
+
         (function initThunderFx() {
             if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+            const isLite = () => document.documentElement.classList.contains("rg-lite");
             const cv = document.createElement("canvas");
             cv.id = "thunderFxCanvas";
             document.body.appendChild(cv);
@@ -4316,7 +4381,7 @@
             const rnd = (a, b) => a + Math.random() * (b - a);
 
             function resize() {
-                dpr = Math.min(window.devicePixelRatio || 1, 2);
+                dpr = window.matchMedia("(pointer: coarse)").matches ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
                 W = window.innerWidth; H = window.innerHeight;
                 cv.width = W * dpr; cv.height = H * dpr;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -4357,7 +4422,7 @@
             }
 
             function burst(x, y, count, power) {
-                for (let i = 0; i < count && sparks.length < 220; i++) {
+                for (let i = 0; i < count && sparks.length < 80; i++) {
                     const a = rnd(0, Math.PI * 2), s = rnd(1.5, power);
                     sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.8, life: 1, decay: rnd(0.025, 0.06), c: COLORS[(Math.random() * COLORS.length) | 0], len: rnd(4, 11) });
                 }
@@ -4365,9 +4430,9 @@
             }
 
             function touchZap(x, y) {
-                burst(x, y, 22, 8);
+                burst(x, y, 12, 7);
                 rings.push({ x, y, r: 4, life: 1 });
-                for (let i = 0; i < 3; i++) {
+                for (let i = 0; i < 2; i++) {
                     const a = rnd(0, Math.PI * 2), l = rnd(45, 110);
                     addBolt(x, y, x + Math.cos(a) * l, y + Math.sin(a) * l, { branches: 1, decay: 0.09, w: 1.8, color: Math.random() < 0.5 ? "#00E5FF" : "#FF607F" });
                 }
@@ -4375,13 +4440,13 @@
             }
 
             function skyStrike() {
-                if (!document.hidden) {
+                if (!document.hidden && !isLite()) {
                     const x = rnd(W * 0.08, W * 0.92);
                     addBolt(x, -10, x + rnd(-120, 120), rnd(H * 0.35, H * 0.8), { w: 3.2, decay: 0.03, branches: 4, color: "#9EF3FF" });
                     flash = 0.14;
                     if (Math.random() < 0.45) setTimeout(() => addBolt(x + rnd(-60, 60), -10, x + rnd(-160, 160), rnd(H * 0.3, H * 0.6), { w: 2.4, decay: 0.05, color: "#FF9EB1" }), 120);
                 }
-                setTimeout(skyStrike, rnd(3500, 8000));
+                setTimeout(skyStrike, rnd(9000, 18000));
             }
 
             function frame() {
@@ -4400,14 +4465,14 @@
                         ctx.lineWidth = w; ctx.stroke();
                     };
                     ctx.lineJoin = "round"; ctx.lineCap = "round";
-                    ctx.shadowBlur = 22; ctx.shadowColor = b.color;
-                    ctx.strokeStyle = b.color; ctx.globalAlpha = a * 0.55;
-                    draw(b.main, b.w * 3); b.branches.forEach(p => draw(p, b.w * 1.6));
-                    ctx.shadowBlur = 0; ctx.strokeStyle = "#FFFFFF"; ctx.globalAlpha = a;
+                    // cheap glow: wide faint stroke + mid stroke + white core
+                    ctx.strokeStyle = b.color;
+                    ctx.globalAlpha = a * 0.14; draw(b.main, b.w * 7);
+                    ctx.globalAlpha = a * 0.4; draw(b.main, b.w * 3); b.branches.forEach(p => draw(p, b.w * 1.8));
+                    ctx.strokeStyle = "#FFFFFF"; ctx.globalAlpha = a;
                     draw(b.main, b.w); b.branches.forEach(p => draw(p, b.w * 0.6));
                 }
 
-                ctx.shadowBlur = 0;
                 for (let i = sparks.length - 1; i >= 0; i--) {
                     const s = sparks[i];
                     s.life -= s.decay;
@@ -4430,15 +4495,15 @@
                 if (bolts.length || sparks.length || rings.length || flash > 0.005) raf = requestAnimationFrame(frame);
                 else { raf = 0; ctx.clearRect(0, 0, W, H); }
             }
-            function start() { if (!raf) raf = requestAnimationFrame(frame); }
+            function start() { if (isLite()) return; if (!raf) raf = requestAnimationFrame(frame); }
 
-            window.addEventListener("pointerdown", (e) => touchZap(e.clientX, e.clientY), { passive: true });
+            window.addEventListener("pointerdown", (e) => { if (!isLite()) touchZap(e.clientX, e.clientY); }, { passive: true });
             window.addEventListener("pointermove", (e) => {
                 const now = performance.now();
-                if (now - lastMove < 45) return;
-                if (e.pointerType === "mouse" && !(e.target.closest && e.target.closest("button, a, .game-card, .rg-perk, .spotlight-feature-card"))) return;
+                if (now - lastMove < 80) return;
+                if (e.pointerType !== "mouse" || !(e.target.closest && e.target.closest("button, a, .game-card, .rg-perk, .spotlight-feature-card"))) return;
                 lastMove = now;
-                burst(e.clientX, e.clientY, 2, 3.5);
+                burst(e.clientX, e.clientY, 1, 3);
             }, { passive: true });
 
             setTimeout(skyStrike, 1500);
