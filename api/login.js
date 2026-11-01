@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const {
-  sql, setSession, clientIp, readCredentials,
+  query, nowSec, fail, setSession, clientIp, readCredentials,
   isRateLimited, logFailedAttempt, clearAttempts
 } = require('./_lib');
 
@@ -19,9 +19,9 @@ module.exports = async (req, res) => {
       return res.status(429).json({ error: 'Too many failed attempts. Please wait 15 minutes and try again.' });
     }
 
-    const rows = await sql`SELECT id, email, role, password_hash FROM users WHERE email = ${email}`;
+    const rows = await query('SELECT id, email, role, password_hash FROM users WHERE email = ?', [email]);
     const u = rows[0];
-    const ok = await bcrypt.compare(password, u ? u.password_hash : DUMMY_HASH) && !!u;
+    const ok = (await bcrypt.compare(password, u ? u.password_hash : DUMMY_HASH)) && !!u;
 
     if (!ok) {
       await logFailedAttempt(email, ip);
@@ -29,11 +29,10 @@ module.exports = async (req, res) => {
     }
 
     await clearAttempts(email);
-    await sql`UPDATE users SET last_login_at = now() WHERE id = ${u.id}`;
+    await query('UPDATE users SET last_login_at = ? WHERE id = ?', [nowSec(), u.id]);
     setSession(res, u);
     res.json({ user: { id: u.id, email: u.email, role: u.role } });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error. Please try again.' });
+    fail(res, err);
   }
 };

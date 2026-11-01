@@ -1,13 +1,13 @@
-const { sql } = require('./_lib');
+const { query, fail } = require('./_lib');
 
-// Tells the frontend whether an owner account exists yet (first-time setup vs normal login)
+// Tells the frontend whether an owner account exists yet (first-time setup vs normal login).
+// Also works as a health check: open /api/status in the browser to see if the database is OK.
 module.exports = async (req, res) => {
   try {
-    const [row] = await sql`SELECT count(*)::int AS n FROM users WHERE role = 'owner'`;
+    const [row] = await query("SELECT count(*) AS n FROM users WHERE role = 'owner'");
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ hasOwner: row.n > 0 });
+    res.json({ hasOwner: Number(row.n) > 0 });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database not reachable' });
+    fail(res, err);
   }
 };

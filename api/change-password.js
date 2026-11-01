@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const {
-  sql, getUser, setSession, clientIp,
+  query, fail, getUser, setSession, clientIp,
   isRateLimited, logFailedAttempt, clearAttempts
 } = require('./_lib');
 
@@ -22,7 +22,7 @@ module.exports = async (req, res) => {
       return res.status(429).json({ error: 'Too many failed attempts. Please wait 15 minutes.' });
     }
 
-    const rows = await sql`SELECT id, email, role, password_hash FROM users WHERE id = ${session.id}`;
+    const rows = await query('SELECT id, email, role, password_hash FROM users WHERE id = ?', [session.id]);
     const u = rows[0];
     if (!u) return res.status(401).json({ error: 'Account not found.' });
 
@@ -32,12 +32,11 @@ module.exports = async (req, res) => {
     }
 
     const hash = await bcrypt.hash(newPassword, 12);
-    await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${u.id}`;
+    await query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, u.id]);
     await clearAttempts(u.email);
     setSession(res, u);
     res.json({ ok: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error. Please try again.' });
+    fail(res, err);
   }
 };

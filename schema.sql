@@ -1,23 +1,23 @@
--- Run this once in the Neon dashboard -> SQL Editor
+-- You do NOT need to run this manually: the API creates these tables automatically
+-- on the first request. It is here only for reference (SQLite / Turso syntax).
 
 CREATE TABLE IF NOT EXISTS users (
-  id            SERIAL PRIMARY KEY,
-  email         TEXT UNIQUE NOT NULL,
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  email         TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'owner')),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_login_at TIMESTAMPTZ
+  created_at    INTEGER NOT NULL,
+  last_login_at INTEGER
 );
 
--- Guarantees there can only ever be ONE owner account
+-- Only one owner account can ever exist
 CREATE UNIQUE INDEX IF NOT EXISTS one_owner_only ON users (role) WHERE role = 'owner';
 
--- Brute-force protection: every failed login is logged here
 CREATE TABLE IF NOT EXISTS login_attempts (
-  id         BIGSERIAL PRIMARY KEY,
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
   email      TEXT NOT NULL,
   ip         TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS login_attempts_email_idx ON login_attempts (email, created_at);
 CREATE INDEX IF NOT EXISTS login_attempts_ip_idx ON login_attempts (ip, created_at);
