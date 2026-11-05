@@ -911,6 +911,21 @@
             border-radius: 0;
         }
 
+        /* Portrait games: tall frame instead of a wide 16:9 one */
+        .player-viewport.is-portrait {
+            aspect-ratio: 9 / 16;
+            width: auto;
+            height: 78vh;
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .player-viewport.is-portrait:fullscreen,
+        .player-viewport.is-portrait:-webkit-full-screen {
+            aspect-ratio: auto;
+            max-width: none;
+            margin: 0;
+        }
+
         .game-iframe {
             width: 100%;
             height: 100%;
@@ -1649,6 +1664,159 @@
         .rg-lite #thunderFxCanvas, .rg-lite #energyFxCanvas, .rg-lite .rg-zap, .rg-lite .rg-ticker { display: none !important; }
         .rg-lite .spotlight-feature-card { box-shadow: none; }
         .rg-lite .games-grid .game-card:hover, .rg-lite .rg-perk:hover { transform: none; box-shadow: none; }
+
+        /* ==========================================================================
+           ULTRA POLISH LAYER (GPU-only: transform + opacity, zero heavy repaint)
+           ========================================================================== */
+        :root {
+            --grad-fire: linear-gradient(135deg, #F04468 0%, #FF607F 55%, #FF8FA3 100%);
+            --grad-neon: linear-gradient(90deg, #F04468, #FF9EB1 45%, #00E5FF);
+            --glow-fire: 0 10px 30px rgba(240, 68, 104, .35);
+            --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+        }
+        ::selection { background: rgba(240, 68, 104, .55); color: #fff; }
+        html { scrollbar-color: #3A3A4A transparent; scrollbar-width: thin; }
+        ::-webkit-scrollbar { width: 9px; height: 9px; }
+        ::-webkit-scrollbar-thumb { background: #2C2C3A; border-radius: 9px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--fire-primary); }
+        :focus-visible { outline: 2px solid var(--electric-blue); outline-offset: 3px; }
+
+        /* Static ambient glow behind everything (painted once, never animates) */
+        body::before {
+            content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background:
+                radial-gradient(900px 500px at 12% -5%, rgba(240, 68, 104, .13), transparent 60%),
+                radial-gradient(800px 500px at 100% 8%, rgba(0, 229, 255, .08), transparent 60%),
+                radial-gradient(700px 400px at 50% 110%, rgba(240, 68, 104, .07), transparent 60%);
+            transform: translateZ(0);
+        }
+
+        /* Kill the animations that force repaints (filter / box-shadow keyframes) */
+        .hero-title .text-crimson { animation: none !important; }
+        .spotlight-banner { animation: rgBannerIn .7s var(--ease-out) both !important; }
+        .studio-kicker-dot { animation: none; box-shadow: 0 0 10px var(--fire-primary); }
+
+        /* Header */
+        .pub-header {
+            background: linear-gradient(180deg, rgba(14, 14, 20, .98), rgba(9, 9, 13, .96)) !important;
+            border-bottom: 1px solid transparent;
+            border-image: linear-gradient(90deg, transparent, rgba(240, 68, 104, .55), rgba(0, 229, 255, .45), transparent) 1;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+        }
+        .brand-emblem { box-shadow: 0 0 18px rgba(240, 68, 104, .55); }
+        .brand-text { letter-spacing: .5px; }
+        .search-trigger-bar { border-radius: 99px; transition: border-color .2s, box-shadow .2s; }
+        .search-trigger-bar:focus-within { border-color: var(--fire-primary); box-shadow: 0 0 0 3px rgba(240, 68, 104, .2); }
+
+        /* Hero */
+        .spotlight-banner {
+            background: linear-gradient(135deg, #14141D 0%, #0F0F17 60%, #120E16 100%);
+            border-color: rgba(255, 255, 255, .08);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .06);
+        }
+        .hero-title { font-size: clamp(34px, 6vw, 68px); line-height: 1.02; letter-spacing: -1.5px; }
+        .hero-subtitle { color: #A9A9B8; }
+        .spotlight-feature-card {
+            background: linear-gradient(160deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02));
+            border-radius: var(--radius-lg);
+        }
+        .studio-kicker { border-radius: 99px; background: rgba(240, 68, 104, .1); border: 1px solid rgba(240, 68, 104, .35); }
+
+        /* Buttons */
+        .btn { position: relative; overflow: hidden; transition: transform .18s var(--ease-spring), box-shadow .2s, background .2s, border-color .2s; }
+        .btn-primary { background: var(--grad-fire); box-shadow: var(--glow-fire); }
+        .btn-primary:hover { background: var(--grad-fire); transform: translateY(-2px) scale(1.02); box-shadow: 0 14px 36px rgba(240, 68, 104, .5); }
+        .btn-primary:active, .btn:active { transform: scale(.96); box-shadow: var(--glow-fire); }
+        .btn-primary::before {
+            content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .35) 50%, transparent 70%);
+            transform: translateX(-120%); transition: transform .6s var(--ease-out); pointer-events: none;
+        }
+        .btn-primary:hover::before { transform: translateX(120%); }
+        .btn-secondary:hover { border-color: var(--fire-primary); }
+
+        /* Chips + tabs */
+        .cat-chip, .filter-pill { transition: transform .2s var(--ease-spring), background .2s, color .2s, border-color .2s; }
+        .cat-chip.active, .filter-pill.active { background: var(--grad-fire); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(240, 68, 104, .35); }
+
+        /* Section titles get a neon accent bar */
+        .section-title { position: relative; padding-left: 14px; }
+        .section-title::before {
+            content: ''; position: absolute; left: 0; top: 12%; bottom: 12%; width: 4px; border-radius: 4px; background: var(--grad-neon);
+        }
+
+        /* Game cards: layered, glowing, buttery smooth */
+        .games-grid { gap: clamp(12px, 2vw, 22px); }
+        .games-grid .game-card, .game-card {
+            background: linear-gradient(180deg, #1A1A24, #14141C);
+            border: 1px solid rgba(255, 255, 255, .06);
+            border-radius: 16px;
+            content-visibility: auto; contain-intrinsic-size: auto 290px;
+            transition: transform .35s var(--ease-spring), box-shadow .35s, border-color .3s;
+            will-change: auto;
+        }
+        .game-card::before {
+            content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit;
+            box-shadow: inset 0 0 0 1px rgba(240, 68, 104, .7), 0 0 28px rgba(240, 68, 104, .35);
+            opacity: 0; transition: opacity .3s;
+        }
+        .game-card::after {
+            content: '' !important; display: block !important; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; z-index: 4;
+            background: var(--grad-neon); transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease-out);
+        }
+        @media (hover: hover) {
+            .game-card:hover { transform: translateY(-8px) scale(1.015); border-color: transparent; box-shadow: 0 22px 44px rgba(0, 0, 0, .6); }
+            .game-card:hover::before { opacity: 1; }
+            .game-card:hover::after { transform: scaleX(1); }
+            .game-card:hover .game-thumb { transform: scale(1.09); }
+            .game-card:hover .play-badge-floating { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .game-thumb { transition: transform .6s var(--ease-out); }
+        .game-card-overlay { background: linear-gradient(180deg, transparent 30%, rgba(9, 9, 13, .92) 100%); }
+        .play-badge-floating { background: var(--grad-fire); box-shadow: var(--glow-fire); transform: translateY(10px) scale(.9); opacity: 0; transition: transform .35s var(--ease-spring), opacity .25s; }
+        .game-cat-tag { border-radius: 99px; background: rgba(9, 9, 13, .78); border: 1px solid rgba(255, 255, 255, .12); }
+        .game-card-title { letter-spacing: -.2px; }
+        .game-card:active { transform: scale(.97); }
+
+        /* Scroll reveal on compositor (no JS, no layout work); ignored by older browsers */
+        @supports (animation-timeline: view()) {
+            .games-grid .game-card, .rg-perk, .section-title-wrap {
+                animation: rgReveal both var(--ease-out); animation-timeline: view(); animation-range: entry 0% entry 35%;
+            }
+        }
+        @keyframes rgReveal { from { opacity: 0; transform: translateY(36px) scale(.96); } to { opacity: 1; transform: none; } }
+
+        /* Perks, panels, forms */
+        .rg-perk, .info-panel, .form-card, .stat-card {
+            background: linear-gradient(180deg, #181821, #13131B); border-color: rgba(255, 255, 255, .06); border-radius: var(--radius-lg);
+        }
+        .rg-perk { transition: transform .3s var(--ease-spring), border-color .3s; }
+        @media (hover: hover) { .rg-perk:hover { transform: translateY(-5px); border-color: rgba(240, 68, 104, .45); } }
+        .form-input, .form-select, .form-textarea { border-radius: 10px; transition: border-color .2s, box-shadow .2s; }
+        .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--fire-primary); box-shadow: 0 0 0 3px rgba(240, 68, 104, .22); }
+
+        /* Player */
+        .player-stage-wrap { border-color: rgba(240, 68, 104, .35); box-shadow: 0 30px 70px rgba(0, 0, 0, .75), 0 0 50px rgba(240, 68, 104, .12); }
+        .player-controls-bar { background: linear-gradient(180deg, #14141C, #0F0F16); }
+        .player-viewport.is-portrait { box-shadow: 0 0 0 1px rgba(255, 255, 255, .06), 0 0 60px rgba(0, 229, 255, .08); }
+        .rotate-hint { border-radius: 12px; background: rgba(0, 229, 255, .06); border-color: rgba(0, 229, 255, .25); }
+
+        /* Admin */
+        .admin-sidebar { background: linear-gradient(180deg, #12121A, #0C0C12); }
+        .admin-nav-item { transition: background .2s, transform .2s var(--ease-out); }
+        .admin-nav-item:hover { transform: translateX(3px); }
+        .admin-nav-item.active { background: linear-gradient(90deg, rgba(240, 68, 104, .22), rgba(240, 68, 104, .04)); box-shadow: inset 3px 0 0 var(--fire-primary); }
+        .admin-table tbody tr { transition: background .15s; }
+        .admin-table tbody tr:hover { background: rgba(255, 255, 255, .03); }
+
+        /* Tap feel on phones */
+        @media (pointer: coarse) { .btn, .cat-chip, .filter-pill { min-height: 40px; } .game-card:active { transform: scale(.96); } }
+        @media (max-width: 768px) { .hero-title { letter-spacing: -.8px; } .section-title { padding-left: 11px; } }
+
+        /* Safety nets: respect reduced motion + auto lite mode on slow devices */
+        @media (prefers-reduced-motion: reduce) { .games-grid .game-card, .rg-perk, .section-title-wrap { animation: none !important; } }
+        .rg-lite .game-card::before, .rg-lite .btn-primary::before { display: none; }
+        .rg-lite .games-grid .game-card, .rg-lite .rg-perk, .rg-lite .section-title-wrap { animation: none !important; }
+        .rg-lite .play-badge-floating { opacity: 1; transform: none; }
     </style>
 </head>
 <body>
@@ -2854,9 +3022,9 @@
                                 </div>
 
                                 <!-- Professional HTML5 Game Player -->
-                                <div class="rotate-hint" role="note">For the best experience, rotate your phone to landscape or tap Fullscreen.</div>
+                                <div class="rotate-hint" role="note">${game.orientation === "portrait" ? "This is a portrait game. Tap Fullscreen for the best experience." : "For the best experience, rotate your phone to landscape or tap Fullscreen."}</div>
                                 <div class="player-stage-wrap">
-                                    <div class="player-viewport" id="playerViewportContainer">
+                                    <div class="player-viewport ${game.orientation === "portrait" ? "is-portrait" : ""}" id="playerViewportContainer">
                                         <div class="player-loading-overlay" id="playerLoadingOverlay">
                                             <div class="spinner-ring"></div>
                                             <span style="font-family:var(--font-display);letter-spacing:1px;font-size:14px;text-transform:uppercase;">Initializing ${escapeHTML(game.title)}...</span>
@@ -3141,17 +3309,27 @@
             const fsBtn = document.getElementById("btnFullscreenGame");
             const viewport = document.getElementById("playerViewportContainer");
             if (fsBtn && viewport) {
+                const wantedOrientation = game.orientation === "portrait" ? "portrait" : "landscape";
                 fsBtn.onclick = async () => {
                     if (!document.fullscreenElement) {
                         try {
                             if (viewport.requestFullscreen) await viewport.requestFullscreen();
-                            if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
+                            else if (viewport.webkitRequestFullscreen) viewport.webkitRequestFullscreen();
                         } catch (err) { /* fullscreen can be refused by the browser */ }
+                        // Lock to the orientation the admin chose for this game (works on mobile browsers).
+                        try {
+                            if (screen.orientation && screen.orientation.lock) {
+                                await screen.orientation.lock(wantedOrientation);
+                            }
+                        } catch (err) { /* orientation lock is not supported everywhere (e.g. desktop, iOS) */ }
                     } else {
                         if (document.exitFullscreen) document.exitFullscreen();
                     }
                 };
                 document.onfullscreenchange = () => {
+                    if (!document.fullscreenElement) {
+                        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (err) { /* ignore */ }
+                    }
                     const label = document.getElementById("fullscreenBtnLabel");
                     if (label) {
                         label.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
@@ -3609,6 +3787,15 @@
                                     </select>
                                 </div>
 
+                                <div class="form-group">
+                                    <label class="form-label">10. Game Orientation (Fullscreen Mode) <span>*</span></label>
+                                    <select id="upOrientation" class="form-select">
+                                        <option value="landscape" ${(editingGame?.orientation || 'landscape') === 'landscape' ? 'selected' : ''}>Landscape (Wide) — opens in landscape</option>
+                                        <option value="portrait" ${editingGame?.orientation === 'portrait' ? 'selected' : ''}>Portrait (Tall) — opens in portrait</option>
+                                    </select>
+                                    <span style="font-size:11.5px;color:var(--text-muted);">Fullscreen par game isi orientation me khulega.</span>
+                                </div>
+
                                 <div class="form-group full-width">
                                     <label class="form-label">7. Game Instructions & Controls <span>*</span></label>
                                     <textarea id="upInstructions" class="form-textarea" style="min-height:80px;" placeholder="WASD / Arrow Keys to steer, Spacebar to boost..." required>${escapeHTML(editingGame?.instructions || '')}</textarea>
@@ -4022,6 +4209,7 @@
                         const instructions = document.getElementById("upInstructions").value.trim();
                         const tags = document.getElementById("upTags").value.trim();
                         const status = document.getElementById("upStatus").value;
+                        const orientation = document.getElementById("upOrientation").value === "portrait" ? "portrait" : "landscape";
 
                         let thumbnailUrl = document.getElementById("upThumbUrl").value.trim();
                         const thumbFile = document.getElementById("upThumbFile").files[0];
@@ -4088,6 +4276,7 @@
                             tags,
                             instructions,
                             status,
+                            orientation,
                             ...sourceFields,
                             is_validated: true,
                             created_at: existingGame ? existingGame.created_at : Date.now(),
